@@ -97,34 +97,36 @@
   /* icon-only top bar once you're in the app — keeps the stage clean (labels live in title tooltips) */
   .ghost .lbl{display:none;}
   .ghost .bi{font-size:16px;line-height:1;}
-  #namePill{transition:opacity .45s;}
-  #namePill.hide{opacity:0;pointer-events:none;}
-  @media (max-width:560px){ .brand{display:none;} .topbar{justify-content:flex-end;} .ghost{padding:9px 11px;} .ico{width:42px;height:42px;font-size:22px;} #meter{bottom:84px;} #bpmRead{bottom:96px;} }
+  /* immersive mode: fade ALL controls (anything .ctl), leaving just the dancer + GrooveStars logo; tap to reveal */
+  .ctl{transition:opacity .4s;}
+  body.lean .ctl{opacity:0;pointer-events:none;}
+  @media (max-width:560px){ .brand{font-size:12px;padding:7px 10px;} .brand .tag{display:none;} .ghost{padding:8px 10px;} .ghost .bi{font-size:15px;} .ico{width:42px;height:42px;font-size:22px;} #meter{bottom:84px;} #bpmRead{bottom:96px;} }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 
-<div id="meter"><div id="meterFill"></div></div>
-<div id="bpmRead">—</div>
+<div id="meter" class="ctl"><div id="meterFill"></div></div>
+<div id="bpmRead" class="ctl">—</div>
 <div id="loading"><span class="spin"></span><span id="loadingTxt">Loading…</span></div>
 <div id="hud">
   <div class="row topbar">
     <div class="brand"><span class="dot"></span><b>GROOVESTARS</b><span class="tag">3D</span></div>
-    <div style="display:flex;gap:8px;pointer-events:auto">
+    <div class="ctl" style="display:flex;gap:8px;pointer-events:auto">
       <button class="ghost" id="partyBtn" title="Party mode"><span class="bi">🎉</span><span class="lbl">Party</span></button>
       <button class="ghost" id="vsBtn" title="Dance-off"><span class="bi">🆚</span><span class="lbl">VS</span></button>
       <button class="ghost" id="loadBtn2" title="Load a model"><span class="bi">📁</span><span class="lbl">Model</span></button>
       <button class="ghost" id="sceneBtn" title="Change scene"><span class="bi">🎬</span><span class="lbl">Scene</span></button>
+      <button class="ghost on" id="eyeBtn" title="Auto-hide controls"><span class="bi">👁</span></button>
       <button class="ghost" id="fsBtn" title="Fullscreen" style="display:none"><span class="bi">⛶</span></button>
     </div>
   </div>
-  <div class="row" id="soloRow">
+  <div class="row ctl" id="soloRow">
     <button class="ico" id="prevMove">‹</button>
     <div class="pill" id="namePill"><span class="sub">Star</span><div class="name" id="moveName">—</div></div>
     <button class="ico" id="nextMove">›</button>
   </div>
-  <div class="row" id="vsrow" style="display:none">
+  <div class="row ctl" id="vsrow" style="display:none">
     <button class="ico" id="prevA">‹</button>
     <div class="pill" style="min-width:94px;padding:8px 12px"><div class="name" id="nameA" style="font-size:14px">—</div></div>
     <button class="ico" id="nextA">›</button>
@@ -133,7 +135,7 @@
     <div class="pill" style="min-width:94px;padding:8px 12px"><div class="name" id="nameB" style="font-size:14px">—</div></div>
     <button class="ico" id="nextB">›</button>
   </div>
-  <div class="row">
+  <div class="row ctl">
     <button class="mic" id="micBtn">🎤 Mic</button>
     <button class="ghost" id="demoBtn">▶ Demo beat</button>
   </div>
@@ -337,9 +339,12 @@ const moveName=document.getElementById('moveName'), loadNote=document.getElement
 const loadingEl=document.getElementById('loading'), loadingTxt=document.getElementById('loadingTxt');
 function showLoading(t){ loadingTxt.textContent=t; loadingEl.classList.add('show'); }
 function hideLoading(){ loadingEl.classList.remove('show'); }
-// name pill flashes on switch then fades, keeping the dancer unobstructed (tap the dancer to peek)
-let nameTimer=null;
-function flashName(){ const p=document.getElementById('namePill'); if(!p)return; p.classList.remove('hide'); clearTimeout(nameTimer); nameTimer=setTimeout(()=>p.classList.add('hide'),2600); }
+// IMMERSIVE auto-hide: all .ctl controls fade after inactivity → just the dancer + GrooveStars logo; tap reveals.
+// Toggle off (eye button) to keep controls pinned on.
+let autoHide=true, chromeTimer=null; const CHROME_MS=3500;
+function showChrome(){ document.body.classList.remove('lean'); clearTimeout(chromeTimer); if(autoHide && rafId) chromeTimer=setTimeout(()=>document.body.classList.add('lean'),CHROME_MS); }
+function flashName(){ showChrome(); }   // legacy alias (called on load/start/switch)
+function setAutoHide(on){ autoHide=on; const e=document.getElementById('eyeBtn'); if(e) e.classList.toggle('on',on); if(on){ showChrome(); } else { clearTimeout(chromeTimer); document.body.classList.remove('lean'); } }
 
 const FIT_HEIGHT=3.6;                              // taller → fills more of the frame
 function installModel(obj){
@@ -544,6 +549,10 @@ document.getElementById('vsBtn').onclick=()=>setVS(!vsMode);
 document.getElementById('partyBtn').onclick=()=>setParty(!partyMode);
 { const fsBtn=document.getElementById('fsBtn'); if(document.documentElement.requestFullscreen){ fsBtn.style.display='inline-flex';
   fsBtn.onclick=()=>{ document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen(); }; } }
+document.getElementById('eyeBtn').onclick=()=>setAutoHide(!autoHide);
+let _lastMove=0;
+addEventListener('pointerdown',showChrome);
+addEventListener('pointermove',()=>{ const t=performance.now(); if(t-_lastMove>400){ _lastMove=t; showChrome(); } });
 document.getElementById('prevA').onclick=()=>loadCharacter(ci-1).then(()=>{ if(vsMode) rig.position.x=-SPREAD; document.getElementById('nameA').textContent=ROSTER[ci].name; });
 document.getElementById('nextA').onclick=()=>loadCharacter(ci+1).then(()=>{ if(vsMode) rig.position.x=-SPREAD; document.getElementById('nameA').textContent=ROSTER[ci].name; });
 document.getElementById('prevB').onclick=()=>loadCharacter2(ci2-1);
