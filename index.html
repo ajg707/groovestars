@@ -144,6 +144,7 @@
     <button class="ghost" id="demoBtn">▶ Demo beat</button>
     <button class="ghost" id="camBtn" title="Camera background"><span class="bi">📷</span></button>
     <button class="ghost" id="flipBtn" title="Flip camera" style="display:none"><span class="bi">🔄</span></button>
+    <button class="ghost" id="recBtn" title="Record clip"><span class="bi">⏺</span></button>
   </div>
 </div>
 
@@ -174,7 +175,7 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 
 /* ---- renderer / scene / camera ---- */
 const canvas=document.getElementById('c');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true,preserveDrawingBuffer:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -597,6 +598,35 @@ function stopCam(){
 }
 document.getElementById('camBtn').onclick=()=>{ camStream?stopCam():startCam(camFacing); };
 document.getElementById('flipBtn').onclick=()=>startCam(camFacing==='user'?'environment':'user');
+
+// ---- IN-APP RECORDER: camera + dancer + mic → one downloadable clip (no screen recording needed) ----
+let rec=null, recChunks=[], recCanvas=null, recCtx=null, recAudio=null, recording=false;
+function recCover(vw,vh,cw,ch){ const va=vw/vh, ca=cw/ch; let sw=vw,sh=vh,sx=0,sy=0; if(va>ca){ sw=vh*ca; sx=(vw-sw)/2; } else { sh=vw/ca; sy=(vh-sh)/2; } return [sx,sy,sw,sh]; }
+function dlBlob(blob,ext){ const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download='groovestars.'+ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),6000); }
+async function toggleRecord(){
+  const b=document.getElementById('recBtn');
+  if(recording){ recording=false; try{ if(rec&&rec.state!=='inactive') rec.stop(); }catch(_){}
+    if(recAudio){ recAudio.getTracks().forEach(t=>t.stop()); recAudio=null; }
+    b.classList.remove('on'); b.querySelector('.bi').textContent='⏺'; showLoading('Saving clip…'); setTimeout(hideLoading,2500); return; }
+  try{
+    if(!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) throw new Error('recording not supported here');
+    recCanvas=document.createElement('canvas'); recCanvas.width=canvas.width||1280; recCanvas.height=canvas.height||720; recCtx=recCanvas.getContext('2d');
+    recording=true;                                                  // start compositing in the loop immediately
+    recCtx.drawImage(canvas,0,0,recCanvas.width,recCanvas.height);   // prime a frame so captureStream begins emitting
+    const vs=recCanvas.captureStream(30); const tracks=[...vs.getVideoTracks()];
+    let at=null;
+    if(micStream && micStream.getAudioTracks()[0] && micStream.getAudioTracks()[0].readyState==='live') at=micStream.getAudioTracks()[0];
+    else { try{ recAudio=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}}); at=recAudio.getAudioTracks()[0]; }catch(_){ at=null; } }
+    if(at) tracks.push(at);
+    const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')?'video/webm;codecs=vp9,opus':'video/webm');
+    rec=new MediaRecorder(new MediaStream(tracks),{mimeType:mime}); recChunks=[];
+    rec.ondataavailable=e=>{ if(e.data&&e.data.size) recChunks.push(e.data); };
+    rec.onstop=()=>{ const blob=new Blob(recChunks,{type:mime}); const ext=mime.indexOf('mp4')>=0?'mp4':'webm'; const file=new File([blob],'groovestars.'+ext,{type:mime});
+      if(navigator.canShare && navigator.canShare({files:[file]})) navigator.share({files:[file],title:'GrooveStars'}).catch(()=>dlBlob(blob,ext)); else dlBlob(blob,ext); };
+    rec.start(100); b.classList.add('on'); b.querySelector('.bi').textContent='⏹'; showChrome();
+  }catch(e){ recording=false; showLoading('Record failed: '+(e.name||e)); setTimeout(hideLoading,5000); }
+}
+document.getElementById('recBtn').onclick=toggleRecord;
 let _lastMove=0;
 addEventListener('pointerdown',showChrome);
 addEventListener('pointermove',()=>{ const t=performance.now(); if(t-_lastMove>400){ _lastMove=t; showChrome(); } });
@@ -685,6 +715,13 @@ function loop(){
   document.getElementById('bpmRead').textContent = (dancing? Math.round(bpm)+' BPM ♪' : '—');
 
   renderer.render(scene,camera);
+  if(recording && recCtx){ const W=recCanvas.width, H=recCanvas.height;
+    if(camStream && camVideo.readyState>=2 && camVideo.videoWidth){ const c=recCover(camVideo.videoWidth,camVideo.videoHeight,W,H);
+      if(camFacing==='user'){ recCtx.save(); recCtx.translate(W,0); recCtx.scale(-1,1); recCtx.drawImage(camVideo,c[0],c[1],c[2],c[3],0,0,W,H); recCtx.restore(); }
+      else recCtx.drawImage(camVideo,c[0],c[1],c[2],c[3],0,0,W,H);
+    } else recCtx.clearRect(0,0,W,H);
+    recCtx.drawImage(canvas,0,0,W,H);   // dancer (transparent over the camera, or opaque scene)
+  }
 }
 function onBeat(){
   beatCount++; punch=1; lastBeatSec=tSec;
