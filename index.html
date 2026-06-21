@@ -97,6 +97,8 @@
   /* icon-only top bar once you're in the app — keeps the stage clean (labels live in title tooltips) */
   .ghost .lbl{display:none;}
   .ghost .bi{font-size:16px;line-height:1;}
+  #namePill{transition:opacity .45s;}
+  #namePill.hide{opacity:0;pointer-events:none;}
   @media (max-width:560px){ .brand{display:none;} .topbar{justify-content:flex-end;} .ghost{padding:9px 11px;} .ico{width:42px;height:42px;font-size:22px;} #meter{bottom:84px;} #bpmRead{bottom:96px;} }
 </style>
 </head>
@@ -119,7 +121,7 @@
   </div>
   <div class="row" id="soloRow">
     <button class="ico" id="prevMove">‹</button>
-    <div class="pill"><span class="sub">Star</span><div class="name" id="moveName">—</div></div>
+    <div class="pill" id="namePill"><span class="sub">Star</span><div class="name" id="moveName">—</div></div>
     <button class="ico" id="nextMove">›</button>
   </div>
   <div class="row" id="vsrow" style="display:none">
@@ -335,6 +337,9 @@ const moveName=document.getElementById('moveName'), loadNote=document.getElement
 const loadingEl=document.getElementById('loading'), loadingTxt=document.getElementById('loadingTxt');
 function showLoading(t){ loadingTxt.textContent=t; loadingEl.classList.add('show'); }
 function hideLoading(){ loadingEl.classList.remove('show'); }
+// name pill flashes on switch then fades, keeping the dancer unobstructed (tap the dancer to peek)
+let nameTimer=null;
+function flashName(){ const p=document.getElementById('namePill'); if(!p)return; p.classList.remove('hide'); clearTimeout(nameTimer); nameTimer=setTimeout(()=>p.classList.add('hide'),2600); }
 
 const FIT_HEIGHT=3.6;                              // taller → fills more of the frame
 function installModel(obj){
@@ -386,7 +391,7 @@ async function loadCharacter(i){
     try{ const g=await fetchGLB(U.idle); if(tok===loadToken && g.animations[0]) idleAct=mixer.clipAction(g.animations[0]); }catch(e){}
     if(tok!==loadToken) return;
     curAct=(idleAct||danceActs[0]); if(curAct) curAct.reset().play();
-    loadNote.textContent="Ready — "+r.name+" 🕺"; hideLoading();
+    loadNote.textContent="Ready — "+r.name+" 🕺"; hideLoading(); flashName();
     document.getElementById('startMic').disabled=false; document.getElementById('startDemo').disabled=false;
     // progressively pull the rest of the move pool without blocking the switch
     for(const cu of U.clips){ fetchGLB(cu).then(g=>{ if(tok===loadToken && mixer && g.animations[0]) danceActs.push(mixer.clipAction(g.animations[0])); }).catch(()=>{}); }
@@ -520,10 +525,11 @@ async function startMic(){
     const src=actx.createMediaStreamSource(micStream);
     analyser=actx.createAnalyser(); analyser.fftSize=1024; analyser.smoothingTimeConstant=0.6;
     data=new Uint8Array(analyser.frequencyBinCount); src.connect(analyser);
-    demoMode=false; document.getElementById('micBtn').classList.add('on'); hideStart(); ensureLoop(); requestWake();
+    demoMode=false; document.getElementById('micBtn').classList.add('on'); hideStart(); ensureLoop(); requestWake(); flashName();
   }catch(e){ alert("No mic ("+e.name+") — using demo beat."); startDemo(); }
 }
-function startDemo(){ demoMode=true; document.getElementById('micBtn').classList.remove('on'); hideStart(); ensureLoop(); requestWake(); }
+function startDemo(){ demoMode=true; document.getElementById('micBtn').classList.remove('on'); hideStart(); ensureLoop(); requestWake(); flashName(); }
+canvas.addEventListener('pointerdown',flashName);   // tap the dancer to peek at the name
 function ensureLoop(){ if(!rafId) loop(); }
 function hideStart(){ const s=document.getElementById('start'); s.style.transition='opacity .4s'; s.style.opacity='0'; setTimeout(()=>s.style.display='none',400); }
 document.getElementById('startMic').onclick=startMic;
