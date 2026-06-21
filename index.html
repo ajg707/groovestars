@@ -520,7 +520,7 @@ let actx,analyser,data,micStream,rafId,demoMode=false,demoPhase=0;
 let wakeLock=null;
 async function requestWake(){ try{ if('wakeLock' in navigator) wakeLock=await navigator.wakeLock.request('screen'); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && rafId) requestWake(); });
-const NB=160, fluxHist=[], specPrev=new Float32Array(256); let lastBeatSec=-1;
+const NB=160, fluxHist=[], specPrev=new Float32Array(256), specAvg=new Float32Array(256); let lastBeatSec=-1;
 // fixed-rate onset envelope + autocorrelation tempo (genre-agnostic: works off any instrument, not just the kick)
 const ODF_RATE=60, ODF_DT=1/ODF_RATE, ODF_N=240;   // 4s of onset envelope
 let odf=new Float32Array(ODF_N), odfPos=0, odfAccum=0, odfTime=0, odfFill=0, lastTempo=0;
@@ -633,7 +633,7 @@ async function toggleRecord(){
 document.getElementById('recBtn').onclick=toggleRecord;
 
 // ---- ICONS: replace emoji with clean inline SVG (stroke = currentColor) ----
-const S=p=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
+const S=p=>'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
 const ICONS={
  party:S('<path d="M5.8 11.3 2 22l10.7-3.8"/><path d="M4 3h.01M22 8h.01M15 2h.01M22 20h.01"/><path d="m22 2-2.2.8a2.9 2.9 0 0 0-2 3.1 1.5 1.5 0 0 1-1.4 1.6h-.4c-.9 0-1.6.6-1.8 1.4L14 10"/><path d="m22 13-.8-.3c-.9-.4-1.8.2-2 1.1a1.5 1.5 0 0 1-1.4 1.2H17"/><path d="m11 2 .3.8c.3.9-.2 1.8-1.1 2-.7.1-1.2.7-1.2 1.4V7"/><path d="M11 13c1.9 1.9 2.8 4.2 2 5s-3.1-.1-5-2-2.8-4.2-2-5 3.1.1 5 2Z"/>'),
  swords:S('<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" x2="9" y1="14" y2="18"/><line x1="7" x2="4" y1="17" y2="20"/><line x1="3" x2="5" y1="19" y2="21"/>'),
@@ -679,9 +679,14 @@ function loop(){
     flux=Math.pow(Math.max(0,Math.sin(bp*2*Math.PI)),8); energy=0.5+0.35*Math.abs(Math.sin(bp*Math.PI)); }
   else if(analyser){ analyser.getByteFrequencyData(data);
     let sm=0; for(let i=0;i<data.length;i++)sm+=data[i]; energy=sm/(data.length*255);
-    // BROADBAND spectral flux (positive change across the whole spectrum) — fires off ANY instrument
-    for(let i=2;i<NB;i++){ const v=data[i]/255; const p=specPrev[i]; if(v>p) flux+=(v-p); specPrev[i]=v; }
-    flux/=20; }
+    // WHITENED spectral flux: each bin is normalised by its OWN recent level, so soft/acoustic genres
+    // (Beatles, jazz, vocals) fire onsets just like bass-heavy electronic music — genre-agnostic
+    for(let i=2;i<NB;i++){ const v=data[i]/255;
+      specAvg[i]+=(v-specAvg[i])*0.02;            // slow per-bin magnitude
+      const w=v/(specAvg[i]+0.04);                // relative change, not absolute loudness
+      if(w>specPrev[i]) flux+=(w-specPrev[i]);
+      specPrev[i]=w; }
+    flux/=24; }
   // feed the fixed-rate onset envelope used by the autocorrelation tempo estimator
   odfAccum+=flux; odfTime+=dt;
   while(odfTime>=ODF_DT){ odfTime-=ODF_DT; odf[odfPos]=odfAccum; odfAccum=0; odfPos=(odfPos+1)%ODF_N; if(odfFill<ODF_N)odfFill++; }
@@ -690,13 +695,13 @@ function loop(){
   fluxHist.push(flux); if(fluxHist.length>43)fluxHist.shift();
   const fAvg=fluxHist.reduce((a,b)=>a+b,0)/fluxHist.length;
   const fVar=fluxHist.reduce((a,b)=>a+(b-fAvg)**2,0)/fluxHist.length;
-  const fThr=fAvg+Math.max(0.008,1.3*Math.sqrt(fVar));
-  if(flux>fThr && flux>0.01 && tSec-lastBeatSec>0.16){ onBeat(); }
+  const fThr=fAvg+Math.max(0.006,1.25*Math.sqrt(fVar));
+  if(flux>fThr && flux>0.005 && tSec-lastBeatSec>0.16){ onBeat(); }
 
-  eSmooth+=(Math.min(1,energy*1.7)-eSmooth)*0.08;
+  eSmooth+=(Math.min(1,energy*2.2)-eSmooth)*0.08;  // more gain so soft songs read on the meter
   punch*=Math.pow(0.0015,dt); bpm+=(bpmTarget-bpm)*0.05;
   const e=Math.max(0,eSmooth);
-  const musicOn = demoMode || eSmooth>0.16;        // is the mic actually hearing music?
+  const musicOn = demoMode || eSmooth>0.09;        // lower gate so soft/acoustic songs still register
 
   // start dancing the instant music kicks in; drop to idle when it stops
   if(musicOn && !dancing){ dancing=true; crossTo(danceActs[Math.floor(Math.random()*Math.max(1,danceActs.length))]||idleAct,0.3); }
