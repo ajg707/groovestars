@@ -23,7 +23,8 @@
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;overflow:hidden;background:#07060d;color:#fff;
     font-family:'Space Grotesk','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
-  #c{position:fixed;inset:0;display:block;width:100%;height:100%;}
+  #c{position:fixed;inset:0;display:block;width:100%;height:100%;z-index:1;}
+  #cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none;background:#000;}
   button{font:inherit;color:#fff;border:none;background:none;cursor:pointer;}
 
   #hud{position:fixed;z-index:5;inset:0;pointer-events:none;display:flex;flex-direction:column;
@@ -104,6 +105,7 @@
 </style>
 </head>
 <body>
+<video id="cam" playsinline muted autoplay></video>
 <canvas id="c"></canvas>
 <a id="arLink" rel="ar" href="" style="position:fixed;left:-9999px;width:1px;height:1px"><img alt="View in AR"></a>
 
@@ -140,6 +142,8 @@
   <div class="row ctl">
     <button class="mic" id="micBtn">🎤 Mic</button>
     <button class="ghost" id="demoBtn">▶ Demo beat</button>
+    <button class="ghost" id="camBtn" title="Camera background"><span class="bi">📷</span></button>
+    <button class="ghost" id="flipBtn" title="Flip camera" style="display:none"><span class="bi">🔄</span></button>
   </div>
 </div>
 
@@ -170,7 +174,7 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 
 /* ---- renderer / scene / camera ---- */
 const canvas=document.getElementById('c');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -558,6 +562,31 @@ document.getElementById('eyeBtn').onclick=()=>setAutoHide(!autoHide);
 { const a=document.createElement('a'); const arOK=!!(a.relList&&a.relList.supports&&a.relList.supports('ar'));
   if(arOK){ const arBtn=document.getElementById('arBtn'); arBtn.style.display='inline-flex';
     arBtn.onclick=()=>{ const lk=document.getElementById('arLink'); lk.href='dance/'+ROSTER[ci].file+'.usdz'; lk.click(); }; } }
+
+// ---- CAMERA BACKGROUND: live camera behind the dancer (flippable). Screen-record it (mic ON) to capture room audio ----
+let camStream=null, camFacing='environment';
+const camVideo=document.getElementById('cam');
+function setSceneTransparent(on){
+  if(on){ scene.background=null; scene.fog=null; renderer.setClearColor(0x000000,0); floor.visible=false; grid.visible=false; stadium.visible=false; }
+  else { renderer.setClearColor(0x000000,1); floor.visible=true; grid.visible=true; applyScene(si); }
+}
+async function startCam(facing){
+  try{
+    if(camStream) camStream.getTracks().forEach(t=>t.stop());
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing}}, audio:false});  // video only → won't grab the audio session
+    camVideo.srcObject=camStream; await camVideo.play(); camFacing=facing;
+    camVideo.style.transform = facing==='user' ? 'scaleX(-1)' : 'none';
+    camVideo.style.display='block'; setSceneTransparent(true);
+    document.getElementById('camBtn').classList.add('on'); document.getElementById('flipBtn').style.display='inline-flex'; showChrome();
+  }catch(e){ alert("No camera ("+(e.name||e)+")"); }
+}
+function stopCam(){
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+  camVideo.style.display='none'; setSceneTransparent(false);
+  document.getElementById('camBtn').classList.remove('on'); document.getElementById('flipBtn').style.display='none';
+}
+document.getElementById('camBtn').onclick=()=>{ camStream?stopCam():startCam(camFacing); };
+document.getElementById('flipBtn').onclick=()=>startCam(camFacing==='user'?'environment':'user');
 let _lastMove=0;
 addEventListener('pointerdown',showChrome);
 addEventListener('pointermove',()=>{ const t=performance.now(); if(t-_lastMove>400){ _lastMove=t; showChrome(); } });
@@ -666,7 +695,7 @@ function resize(w=innerWidth,h=innerHeight){ w=Math.max(w,320); h=Math.max(h,320
   canvas.style.width='100%'; canvas.style.height='100%'; if(partyMode) framePartyCam(); }
 addEventListener('resize',()=>resize()); resize();
 
-window.__gs={applyScene,startDemo,resize,renderer,camera,scene,loadCharacter,loadCharacter2,setVS,setParty,
+window.__gs={applyScene,startDemo,resize,renderer,camera,scene,loadCharacter,loadCharacter2,setVS,setParty,setSceneTransparent,startCam,stopCam,
   tick:(d)=>{ if(mixer) mixer.update(d); if(mixer2&&vsMode) mixer2.update(d); }, get clip(){return curAct&&curAct.getClip().name;},
   get state(){return {loaded,si,ci,ci2,vsMode,partyMode,party:partyDancers.length,demoMode,dancing,dancing2,moves:danceActs.length,moves2:danceActs2.length,move:moveName.textContent,
     mixerTime:mixer&&+mixer.time.toFixed(2),camZ:+camera.position.z.toFixed(1),bpm:+bpm.toFixed(0)};}};
