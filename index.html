@@ -525,6 +525,8 @@ function estimateTempo(){
 }
 async function startMic(){
   try{
+    // ask iOS Safari to use a session that records WHILE other audio keeps playing (newer WebKit API; no-op elsewhere)
+    try{ if('audioSession' in navigator) navigator.audioSession.type='play-and-record'; }catch(_){}
     micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     actx=actx||new (window.AudioContext||window.webkitAudioContext)(); await actx.resume();
     const src=actx.createMediaStreamSource(micStream);
