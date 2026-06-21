@@ -572,13 +572,23 @@ function setSceneTransparent(on){
 }
 async function startCam(facing){
   try{
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('no getUserMedia (needs HTTPS / Safari)');
     if(camStream) camStream.getTracks().forEach(t=>t.stop());
-    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing}}, audio:false});  // video only → won't grab the audio session
-    camVideo.srcObject=camStream; await camVideo.play(); camFacing=facing;
+    let stream;
+    try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing}}, audio:false}); }
+    catch(_){ stream=await navigator.mediaDevices.getUserMedia({video:true, audio:false}); }  // fallback: any camera
+    camStream=stream; camFacing=facing;
+    camVideo.muted=true; camVideo.setAttribute('playsinline','');
     camVideo.style.transform = facing==='user' ? 'scaleX(-1)' : 'none';
-    camVideo.style.display='block'; setSceneTransparent(true);
+    camVideo.style.display='block'; setSceneTransparent(true);     // make layout ready BEFORE play (iOS)
+    camVideo.srcObject=stream;
+    try{ await camVideo.play(); }catch(_){}
     document.getElementById('camBtn').classList.add('on'); document.getElementById('flipBtn').style.display='inline-flex'; showChrome();
-  }catch(e){ alert("No camera ("+(e.name||e)+")"); }
+  }catch(e){
+    setSceneTransparent(false); camVideo.style.display='none';
+    showLoading('Camera blocked: '+(e.name||e)+' — open in Safari (not the Home-Screen app) and Allow camera');
+    setTimeout(hideLoading, 7000);
+  }
 }
 function stopCam(){
   if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
