@@ -98,6 +98,10 @@
   /* icon-only top bar once you're in the app — keeps the stage clean (labels live in title tooltips) */
   .ghost .lbl{display:none;}
   .ghost .bi{font-size:16px;line-height:1;}
+  .bi{display:inline-flex;align-items:center;justify-content:center;}
+  .bi svg{width:1.3em;height:1.3em;display:block;}
+  .ico svg{width:24px;height:24px;}
+  .mic,#demoBtn{display:inline-flex;align-items:center;gap:7px;}
   /* immersive mode: fade ALL controls (anything .ctl), leaving just the dancer + GrooveStars logo; tap to reveal */
   .ctl{transition:opacity .4s;}
   body.lean .ctl{opacity:0;pointer-events:none;}
@@ -140,8 +144,8 @@
     <button class="ico" id="nextB">›</button>
   </div>
   <div class="row ctl">
-    <button class="mic" id="micBtn">🎤 Mic</button>
-    <button class="ghost" id="demoBtn">▶ Demo beat</button>
+    <button class="mic" id="micBtn">Mic</button>
+    <button class="ghost" id="demoBtn">Demo</button>
     <button class="ghost" id="camBtn" title="Camera background"><span class="bi">📷</span></button>
     <button class="ghost" id="flipBtn" title="Flip camera" style="display:none"><span class="bi">🔄</span></button>
     <button class="ghost" id="recBtn" title="Record clip"><span class="bi">⏺</span></button>
@@ -351,7 +355,7 @@ function hideLoading(){ loadingEl.classList.remove('show'); }
 let autoHide=true, chromeTimer=null; const CHROME_MS=3500;
 function showChrome(){ document.body.classList.remove('lean'); clearTimeout(chromeTimer); if(autoHide && rafId) chromeTimer=setTimeout(()=>document.body.classList.add('lean'),CHROME_MS); }
 function flashName(){ showChrome(); }   // legacy alias (called on load/start/switch)
-function setAutoHide(on){ autoHide=on; const e=document.getElementById('eyeBtn'); if(e) e.classList.toggle('on',on); if(on){ showChrome(); } else { clearTimeout(chromeTimer); document.body.classList.remove('lean'); } }
+function setAutoHide(on){ autoHide=on; const e=document.getElementById('eyeBtn'); if(e){ e.classList.toggle('on',on); const s=e.querySelector('.bi'); if(s) s.innerHTML=on?ICONS.eye:ICONS.eyeoff; } if(on){ showChrome(); } else { clearTimeout(chromeTimer); document.body.classList.remove('lean'); } }
 
 const FIT_HEIGHT=3.6;                              // taller → fills more of the frame
 function installModel(obj){
@@ -403,7 +407,7 @@ async function loadCharacter(i){
     try{ const g=await fetchGLB(U.idle); if(tok===loadToken && g.animations[0]) idleAct=mixer.clipAction(g.animations[0]); }catch(e){}
     if(tok!==loadToken) return;
     curAct=(idleAct||danceActs[0]); if(curAct) curAct.reset().play();
-    loadNote.textContent="Ready — "+r.name+" 🕺"; hideLoading(); flashName();
+    loadNote.textContent="Ready — "+r.name; hideLoading(); flashName();
     document.getElementById('startMic').disabled=false; document.getElementById('startDemo').disabled=false;
     // progressively pull the rest of the move pool without blocking the switch
     for(const cu of U.clips){ fetchGLB(cu).then(g=>{ if(tok===loadToken && mixer && g.animations[0]) danceActs.push(mixer.clipAction(g.animations[0])); }).catch(()=>{}); }
@@ -444,7 +448,7 @@ function setVS(on){
   vsMode=on; rig2.visible=on;
   document.getElementById('vsrow').style.display=on?'flex':'none';
   document.getElementById('soloRow').style.display=on?'none':'flex';
-  { const vb=document.getElementById('vsBtn'); vb.querySelector('.bi').textContent=on?'✕':'🆚'; vb.querySelector('.lbl').textContent=on?'Solo':'VS'; vb.classList.toggle('on',on); }
+  { const vb=document.getElementById('vsBtn'); vb.querySelector('.bi').innerHTML=on?ICONS.x:ICONS.swords; vb.querySelector('.lbl').textContent=on?'Solo':'VS'; vb.classList.toggle('on',on); }
   if(on){
     rig.position.x=-SPREAD; rig2.position.x=SPREAD;
     document.getElementById('nameA').textContent=ROSTER[ci].name;
@@ -477,7 +481,7 @@ async function addPartyDancer(i,p,tok){ const r=ROSTER[i],U=charUrls(r); let g; 
   const mx=new THREE.AnimationMixer(m); let act=null; if(g.animations[0]){ act=mx.clipAction(g.animations[0]); act.play(); act.time=Math.random()*3; }
   partyDancers.push({rig:rg,mixer:mx,act,rot0,rate:0.88+Math.random()*0.34,bob:0.65+Math.random()*0.7,phase:Math.random()*6.28});
   if(loadNote) loadNote.textContent='Party: '+partyDancers.length+'/'+ROSTER.length+' on stage'; }
-function setParty(on){ partyMode=on; const b=document.getElementById('partyBtn'); b.classList.toggle('on',on); b.querySelector('.bi').textContent=on?'✕':'🎉'; b.querySelector('.lbl').textContent='Party';
+function setParty(on){ partyMode=on; const b=document.getElementById('partyBtn'); b.classList.toggle('on',on); b.querySelector('.bi').innerHTML=on?ICONS.x:ICONS.party; b.querySelector('.lbl').textContent='Party';
   if(on){ if(vsMode) setVS(false); rig.visible=false; rig2.visible=false;
     document.getElementById('soloRow').style.display='none'; document.getElementById('vsrow').style.display='none'; document.getElementById('vsBtn').style.display='none';
     partyGroup.visible=true; scene.fog=null; const tok=++partyToken; clearParty();
@@ -607,7 +611,7 @@ async function toggleRecord(){
   const b=document.getElementById('recBtn');
   if(recording){ recording=false; try{ if(rec&&rec.state!=='inactive') rec.stop(); }catch(_){}
     if(recAudio){ recAudio.getTracks().forEach(t=>t.stop()); recAudio=null; }
-    b.classList.remove('on'); b.querySelector('.bi').textContent='⏺'; showLoading('Saving clip…'); setTimeout(hideLoading,2500); return; }
+    b.classList.remove('on'); b.querySelector('.bi').innerHTML=ICONS.rec; showLoading('Saving clip…'); setTimeout(hideLoading,2500); return; }
   try{
     if(!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) throw new Error('recording not supported here');
     recCanvas=document.createElement('canvas'); recCanvas.width=canvas.width||1280; recCanvas.height=canvas.height||720; recCtx=recCanvas.getContext('2d');
@@ -623,10 +627,36 @@ async function toggleRecord(){
     rec.ondataavailable=e=>{ if(e.data&&e.data.size) recChunks.push(e.data); };
     rec.onstop=()=>{ const blob=new Blob(recChunks,{type:mime}); const ext=mime.indexOf('mp4')>=0?'mp4':'webm'; const file=new File([blob],'groovestars.'+ext,{type:mime});
       if(navigator.canShare && navigator.canShare({files:[file]})) navigator.share({files:[file],title:'GrooveStars'}).catch(()=>dlBlob(blob,ext)); else dlBlob(blob,ext); };
-    rec.start(100); b.classList.add('on'); b.querySelector('.bi').textContent='⏹'; showChrome();
+    rec.start(100); b.classList.add('on'); b.querySelector('.bi').innerHTML=ICONS.stop; showChrome();
   }catch(e){ recording=false; showLoading('Record failed: '+(e.name||e)); setTimeout(hideLoading,5000); }
 }
 document.getElementById('recBtn').onclick=toggleRecord;
+
+// ---- ICONS: replace emoji with clean inline SVG (stroke = currentColor) ----
+const S=p=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
+const ICONS={
+ party:S('<path d="M5.8 11.3 2 22l10.7-3.8"/><path d="M4 3h.01M22 8h.01M15 2h.01M22 20h.01"/><path d="m22 2-2.2.8a2.9 2.9 0 0 0-2 3.1 1.5 1.5 0 0 1-1.4 1.6h-.4c-.9 0-1.6.6-1.8 1.4L14 10"/><path d="m22 13-.8-.3c-.9-.4-1.8.2-2 1.1a1.5 1.5 0 0 1-1.4 1.2H17"/><path d="m11 2 .3.8c.3.9-.2 1.8-1.1 2-.7.1-1.2.7-1.2 1.4V7"/><path d="M11 13c1.9 1.9 2.8 4.2 2 5s-3.1-.1-5-2-2.8-4.2-2-5 3.1.1 5 2Z"/>'),
+ swords:S('<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" x2="9" y1="14" y2="18"/><line x1="7" x2="4" y1="17" y2="20"/><line x1="3" x2="5" y1="19" y2="21"/>'),
+ upload:S('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>'),
+ image:S('<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>'),
+ box:S('<path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>'),
+ eye:S('<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>'),
+ eyeoff:S('<path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M10.7 5.1A10 10 0 0 1 12 5c7 0 10 7 10 7a13 13 0 0 1-1.7 2.7"/><path d="M6.6 6.6A13 13 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><line x1="2" x2="22" y1="2" y2="22"/>'),
+ maximize:S('<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>'),
+ mic:S('<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>'),
+ play:S('<polygon points="6 3 20 12 6 21 6 3" fill="currentColor"/>'),
+ camera:S('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>'),
+ flip:S('<path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/><path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5"/><circle cx="12" cy="12" r="3"/><path d="m18 22-3-3 3-3"/><path d="m6 2 3 3-3 3"/>'),
+ rec:S('<circle cx="12" cy="12" r="6" fill="currentColor"/>'),
+ stop:S('<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>'),
+ x:S('<path d="M18 6 6 18M6 6l12 12"/>'),
+ chevL:S('<path d="m15 18-6-6 6-6"/>'),
+ chevR:S('<path d="m9 18 6-6-6-6"/>')
+};
+function setIcon(sel,name){ const b=document.querySelector(sel); if(!b)return; let s=b.querySelector('.bi'); if(!s){ s=document.createElement('span'); s.className='bi'; b.insertBefore(s,b.firstChild); } s.innerHTML=ICONS[name]; }
+setIcon('#partyBtn','party'); setIcon('#vsBtn','swords'); setIcon('#loadBtn2','upload'); setIcon('#sceneBtn','image'); setIcon('#arBtn','box'); setIcon('#eyeBtn','eye'); setIcon('#fsBtn','maximize'); setIcon('#micBtn','mic'); setIcon('#demoBtn','play'); setIcon('#camBtn','camera'); setIcon('#flipBtn','flip'); setIcon('#recBtn','rec');
+['#prevMove','#prevA','#prevB'].forEach(s=>{ const b=document.querySelector(s); if(b) b.innerHTML=ICONS.chevL; });
+['#nextMove','#nextA','#nextB'].forEach(s=>{ const b=document.querySelector(s); if(b) b.innerHTML=ICONS.chevR; });
 let _lastMove=0;
 addEventListener('pointerdown',showChrome);
 addEventListener('pointermove',()=>{ const t=performance.now(); if(t-_lastMove>400){ _lastMove=t; showChrome(); } });
