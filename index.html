@@ -474,7 +474,7 @@ function setParty(on){ partyMode=on; const b=document.getElementById('partyBtn')
   if(on){ if(vsMode) setVS(false); rig.visible=false; rig2.visible=false;
     document.getElementById('soloRow').style.display='none'; document.getElementById('vsrow').style.display='none'; document.getElementById('vsBtn').style.display='none';
     partyGroup.visible=true; scene.fog=null; const tok=++partyToken; clearParty();
-    const cap = innerWidth<820 ? Math.min(8,ROSTER.length) : ROSTER.length;   // phones: cap the troupe so GPU/memory survives
+    const cap = innerWidth>=820 ? ROSTER.length : Math.max(4, Math.min(6, Math.round(navigator.deviceMemory||4)+1));   // phones: cap troupe to device memory so the GPU survives
     partyLay=partyLayout(cap); framePartyCam();
     let next=0; const lane=async()=>{ while(next<cap && tok===partyToken){ const i=next++; await addPartyDancer(i,partyLay.pos[i],tok); } };
     for(let l=0;l<3;l++) lane();
@@ -553,6 +553,9 @@ document.getElementById('eyeBtn').onclick=()=>setAutoHide(!autoHide);
 let _lastMove=0;
 addEventListener('pointerdown',showChrome);
 addEventListener('pointermove',()=>{ const t=performance.now(); if(t-_lastMove>400){ _lastMove=t; showChrome(); } });
+// if the GPU runs out (e.g. party mode on a low-memory phone) recover gracefully instead of a silent black screen
+canvas.addEventListener('webglcontextlost', e=>{ e.preventDefault(); if(rafId){ cancelAnimationFrame(rafId); rafId=null; } if(partyMode){ try{ setParty(false); }catch(_){}} showLoading('⚠ Too heavy for this device — back to one dancer'); setTimeout(hideLoading,3200); });
+canvas.addEventListener('webglcontextrestored', ()=>{ ensureLoop(); });
 document.getElementById('prevA').onclick=()=>loadCharacter(ci-1).then(()=>{ if(vsMode) rig.position.x=-SPREAD; document.getElementById('nameA').textContent=ROSTER[ci].name; });
 document.getElementById('nextA').onclick=()=>loadCharacter(ci+1).then(()=>{ if(vsMode) rig.position.x=-SPREAD; document.getElementById('nameA').textContent=ROSTER[ci].name; });
 document.getElementById('prevB').onclick=()=>loadCharacter2(ci2-1);
