@@ -74,6 +74,12 @@
     font-size:11px;font-weight:700;letter-spacing:1.5px;color:rgba(255,255,255,.88);padding:5px 13px;border-radius:11px;
     background:var(--glass);border:1px solid var(--brd);backdrop-filter:blur(14px);}
   #bpmRead::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);}
+  #loading{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:14;display:none;align-items:center;gap:11px;
+    padding:13px 22px;border-radius:15px;background:var(--glass);border:1px solid var(--brd);backdrop-filter:var(--blur);box-shadow:var(--shadow);
+    font-size:13.5px;font-weight:600;letter-spacing:.3px;color:#fff;}
+  #loading.show{display:flex;}
+  .spin{width:17px;height:17px;border-radius:50%;border:2.5px solid rgba(255,255,255,.22);border-top-color:var(--pink);animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
 
   #start{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px;
     text-align:center;padding:24px;background:radial-gradient(120% 80% at 50% 28%,#2c0b50 0%,#0b0717 55%,#06040c 100%);}
@@ -88,6 +94,10 @@
   .cta[disabled]{opacity:.45;pointer-events:none;}
   .legal{position:absolute;bottom:16px;font-size:10px;color:rgba(255,255,255,.4);max-width:360px;line-height:1.45;}
   #loadNote{font-size:13px;color:var(--muted);min-height:18px;font-weight:500;}
+  /* icon-only top bar once you're in the app — keeps the stage clean (labels live in title tooltips) */
+  .ghost .lbl{display:none;}
+  .ghost .bi{font-size:16px;line-height:1;}
+  @media (max-width:560px){ .brand{display:none;} .topbar{justify-content:flex-end;} .ghost{padding:9px 11px;} .ico{width:42px;height:42px;font-size:22px;} #meter{bottom:84px;} #bpmRead{bottom:96px;} }
 </style>
 </head>
 <body>
@@ -95,14 +105,16 @@
 
 <div id="meter"><div id="meterFill"></div></div>
 <div id="bpmRead">—</div>
+<div id="loading"><span class="spin"></span><span id="loadingTxt">Loading…</span></div>
 <div id="hud">
   <div class="row topbar">
     <div class="brand"><span class="dot"></span><b>GROOVESTARS</b><span class="tag">3D</span></div>
     <div style="display:flex;gap:8px;pointer-events:auto">
-      <button class="ghost" id="partyBtn">🎉 Party</button>
-      <button class="ghost" id="vsBtn">🆚 VS</button>
-      <button class="ghost" id="loadBtn2">📁 Model</button>
-      <button class="ghost" id="sceneBtn">🎬 Scene</button>
+      <button class="ghost" id="partyBtn" title="Party mode"><span class="bi">🎉</span><span class="lbl">Party</span></button>
+      <button class="ghost" id="vsBtn" title="Dance-off"><span class="bi">🆚</span><span class="lbl">VS</span></button>
+      <button class="ghost" id="loadBtn2" title="Load a model"><span class="bi">📁</span><span class="lbl">Model</span></button>
+      <button class="ghost" id="sceneBtn" title="Change scene"><span class="bi">🎬</span><span class="lbl">Scene</span></button>
+      <button class="ghost" id="fsBtn" title="Fullscreen" style="display:none"><span class="bi">⛶</span></button>
     </div>
   </div>
   <div class="row" id="soloRow">
@@ -314,11 +326,15 @@ const ROSTER=[
   {name:"Wemby",file:"wemby"},{name:"Drake",file:"drake"},{name:"Tim Robinson",file:"tim"},
   {name:"Kenny Powers",file:"kenny"},{name:"Ashley Shaffer",file:"ashley"},
   {name:"Haaland",file:"haaland"},
+  {name:"Olise",file:"olise"},{name:"Yamal",file:"yamal"},
 ];
 const NMOVES=7;   // d1..d7 per character (loaded progressively)
 function charUrls(r){ const c=[]; for(let k=1;k<=NMOVES;k++) c.push(`dance/${r.file}_d${k}.glb`); return {base:`dance/${r.file}.glb`, idle:`dance/${r.file}_idle.glb`, clips:c}; }
 let loadToken=0, loadToken2=0;
 const moveName=document.getElementById('moveName'), loadNote=document.getElementById('loadNote');
+const loadingEl=document.getElementById('loading'), loadingTxt=document.getElementById('loadingTxt');
+function showLoading(t){ loadingTxt.textContent=t; loadingEl.classList.add('show'); }
+function hideLoading(){ loadingEl.classList.remove('show'); }
 
 const FIT_HEIGHT=3.6;                              // taller → fills more of the frame
 function installModel(obj){
@@ -361,7 +377,7 @@ function crossTo(act, dur=0.4){
 async function loadCharacter(i){
   const tok=++loadToken;
   ci=(i+ROSTER.length)%ROSTER.length; const r=ROSTER[ci], U=charUrls(r);
-  loadNote.textContent="Loading "+r.name+"…"; moveName.textContent=r.name;
+  loadNote.textContent="Loading "+r.name+"…"; moveName.textContent=r.name; showLoading("Loading "+r.name+"…");
   try{
     const baseG=await fetchGLB(U.base); if(tok!==loadToken) return;
     installModel(baseG.scene);
@@ -370,11 +386,11 @@ async function loadCharacter(i){
     try{ const g=await fetchGLB(U.idle); if(tok===loadToken && g.animations[0]) idleAct=mixer.clipAction(g.animations[0]); }catch(e){}
     if(tok!==loadToken) return;
     curAct=(idleAct||danceActs[0]); if(curAct) curAct.reset().play();
-    loadNote.textContent="Ready — "+r.name+" 🕺";
+    loadNote.textContent="Ready — "+r.name+" 🕺"; hideLoading();
     document.getElementById('startMic').disabled=false; document.getElementById('startDemo').disabled=false;
     // progressively pull the rest of the move pool without blocking the switch
     for(const cu of U.clips){ fetchGLB(cu).then(g=>{ if(tok===loadToken && mixer && g.animations[0]) danceActs.push(mixer.clipAction(g.animations[0])); }).catch(()=>{}); }
-  }catch(e){ loadNote.textContent="⚠ "+r.name+" failed"; console.error(e); }
+  }catch(e){ loadNote.textContent="⚠ "+r.name+" failed"; hideLoading(); console.error(e); }
 }
 
 loadCharacter(0);
@@ -411,7 +427,7 @@ function setVS(on){
   vsMode=on; rig2.visible=on;
   document.getElementById('vsrow').style.display=on?'flex':'none';
   document.getElementById('soloRow').style.display=on?'none':'flex';
-  document.getElementById('vsBtn').textContent=on?'✕ Solo':'🆚 VS'; document.getElementById('vsBtn').classList.toggle('on',on);
+  { const vb=document.getElementById('vsBtn'); vb.querySelector('.bi').textContent=on?'✕':'🆚'; vb.querySelector('.lbl').textContent=on?'Solo':'VS'; vb.classList.toggle('on',on); }
   if(on){
     rig.position.x=-SPREAD; rig2.position.x=SPREAD;
     document.getElementById('nameA').textContent=ROSTER[ci].name;
@@ -444,7 +460,7 @@ async function addPartyDancer(i,p,tok){ const r=ROSTER[i],U=charUrls(r); let g; 
   const mx=new THREE.AnimationMixer(m); let act=null; if(g.animations[0]){ act=mx.clipAction(g.animations[0]); act.play(); act.time=Math.random()*3; }
   partyDancers.push({rig:rg,mixer:mx,act,rot0,rate:0.88+Math.random()*0.34,bob:0.65+Math.random()*0.7,phase:Math.random()*6.28});
   if(loadNote) loadNote.textContent='Party: '+partyDancers.length+'/'+ROSTER.length+' on stage'; }
-function setParty(on){ partyMode=on; const b=document.getElementById('partyBtn'); b.classList.toggle('on',on); b.textContent=on?'✕ Party':'🎉 Party';
+function setParty(on){ partyMode=on; const b=document.getElementById('partyBtn'); b.classList.toggle('on',on); b.querySelector('.bi').textContent=on?'✕':'🎉'; b.querySelector('.lbl').textContent='Party';
   if(on){ if(vsMode) setVS(false); rig.visible=false; rig2.visible=false;
     document.getElementById('soloRow').style.display='none'; document.getElementById('vsrow').style.display='none'; document.getElementById('vsBtn').style.display='none';
     partyGroup.visible=true; scene.fog=null; const tok=++partyToken; clearParty();
@@ -479,6 +495,10 @@ addEventListener('drop',e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) loa
 
 /* ---- audio + beat detection ---- */
 let actx,analyser,data,micStream,rafId,demoMode=false,demoPhase=0;
+// keep the screen awake while dancing (released automatically when tab is hidden → re-acquire on return)
+let wakeLock=null;
+async function requestWake(){ try{ if('wakeLock' in navigator) wakeLock=await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && rafId) requestWake(); });
 const NB=160, fluxHist=[], specPrev=new Float32Array(256); let lastBeatSec=-1;
 // fixed-rate onset envelope + autocorrelation tempo (genre-agnostic: works off any instrument, not just the kick)
 const ODF_RATE=60, ODF_DT=1/ODF_RATE, ODF_N=240;   // 4s of onset envelope
@@ -500,10 +520,10 @@ async function startMic(){
     const src=actx.createMediaStreamSource(micStream);
     analyser=actx.createAnalyser(); analyser.fftSize=1024; analyser.smoothingTimeConstant=0.6;
     data=new Uint8Array(analyser.frequencyBinCount); src.connect(analyser);
-    demoMode=false; document.getElementById('micBtn').classList.add('on'); hideStart(); ensureLoop();
+    demoMode=false; document.getElementById('micBtn').classList.add('on'); hideStart(); ensureLoop(); requestWake();
   }catch(e){ alert("No mic ("+e.name+") — using demo beat."); startDemo(); }
 }
-function startDemo(){ demoMode=true; document.getElementById('micBtn').classList.remove('on'); hideStart(); ensureLoop(); }
+function startDemo(){ demoMode=true; document.getElementById('micBtn').classList.remove('on'); hideStart(); ensureLoop(); requestWake(); }
 function ensureLoop(){ if(!rafId) loop(); }
 function hideStart(){ const s=document.getElementById('start'); s.style.transition='opacity .4s'; s.style.opacity='0'; setTimeout(()=>s.style.display='none',400); }
 document.getElementById('startMic').onclick=startMic;
@@ -516,6 +536,8 @@ document.getElementById('sceneBtn').onclick=()=>{ applyScene(si+1); if(partyMode
 document.getElementById('demoBtn').onclick=startDemo;
 document.getElementById('vsBtn').onclick=()=>setVS(!vsMode);
 document.getElementById('partyBtn').onclick=()=>setParty(!partyMode);
+{ const fsBtn=document.getElementById('fsBtn'); if(document.documentElement.requestFullscreen){ fsBtn.style.display='inline-flex';
+  fsBtn.onclick=()=>{ document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen(); }; } }
 document.getElementById('prevA').onclick=()=>loadCharacter(ci-1).then(()=>{ if(vsMode) rig.position.x=-SPREAD; document.getElementById('nameA').textContent=ROSTER[ci].name; });
 document.getElementById('nextA').onclick=()=>loadCharacter(ci+1).then(()=>{ if(vsMode) rig.position.x=-SPREAD; document.getElementById('nameA').textContent=ROSTER[ci].name; });
 document.getElementById('prevB').onclick=()=>loadCharacter2(ci2-1);
