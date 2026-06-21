@@ -105,6 +105,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<a id="arLink" rel="ar" href="" style="position:fixed;left:-9999px;width:1px;height:1px"><img alt="View in AR"></a>
 
 <div id="meter" class="ctl"><div id="meterFill"></div></div>
 <div id="bpmRead" class="ctl">—</div>
@@ -117,6 +118,7 @@
       <button class="ghost" id="vsBtn" title="Dance-off"><span class="bi">🆚</span><span class="lbl">VS</span></button>
       <button class="ghost" id="loadBtn2" title="Load a model"><span class="bi">📁</span><span class="lbl">Model</span></button>
       <button class="ghost" id="sceneBtn" title="Change scene"><span class="bi">🎬</span><span class="lbl">Scene</span></button>
+      <button class="ghost" id="arBtn" title="View in AR" style="display:none"><span class="bi">📱</span></button>
       <button class="ghost on" id="eyeBtn" title="Auto-hide controls"><span class="bi">👁</span></button>
       <button class="ghost" id="fsBtn" title="Fullscreen" style="display:none"><span class="bi">⛶</span></button>
     </div>
@@ -552,6 +554,10 @@ document.getElementById('partyBtn').onclick=()=>setParty(!partyMode);
 { const fsBtn=document.getElementById('fsBtn'); if(document.documentElement.requestFullscreen){ fsBtn.style.display='inline-flex';
   fsBtn.onclick=()=>{ document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen(); }; } }
 document.getElementById('eyeBtn').onclick=()=>setAutoHide(!autoHide);
+// AR Quick Look (iOS Safari only): drop the current dancer into your room — plays its baked dance loop
+{ const a=document.createElement('a'); const arOK=!!(a.relList&&a.relList.supports&&a.relList.supports('ar'));
+  if(arOK){ const arBtn=document.getElementById('arBtn'); arBtn.style.display='inline-flex';
+    arBtn.onclick=()=>{ const lk=document.getElementById('arLink'); lk.href='dance/'+ROSTER[ci].file+'.usdz'; lk.click(); }; } }
 let _lastMove=0;
 addEventListener('pointerdown',showChrome);
 addEventListener('pointermove',()=>{ const t=performance.now(); if(t-_lastMove>400){ _lastMove=t; showChrome(); } });
